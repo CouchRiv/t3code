@@ -323,10 +323,11 @@ object AgentNotifications {
     scheme: String,
     path: String?,
     id: Int
-  ): PendingIntent {
+  ): PendingIntent? {
     val threadPath = path?.takeIf { it.startsWith("/threads/") }
     val route = threadPath?.takeUnless { it.contains('?') || it.contains('#') } ?: "/"
-    val intent = context.packageManager.getLaunchIntentForPackage(context.packageName)!!
+    val launchIntent = context.packageManager.getLaunchIntentForPackage(context.packageName) ?: return null
+    val intent = launchIntent
       .setAction(Intent.ACTION_VIEW).setData(Uri.parse("$scheme:/$route"))
       .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
     return PendingIntent.getActivity(

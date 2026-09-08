@@ -8,6 +8,7 @@ import android.app.NotificationManager
 import android.content.ComponentName
 import android.content.Intent
 import android.content.IntentFilter
+import android.content.pm.PackageManager
 import android.os.Build
 import androidx.core.app.NotificationCompat
 import androidx.lifecycle.Lifecycle
@@ -239,6 +240,29 @@ class AgentNotificationsTest {
       "t3code-dev://threads/environment/thread",
       shadowOf(card.contentIntent).savedIntent.dataString
     )
+  }
+
+  @Test
+  fun missingLauncherStillDisplaysAlertsAndOffersActivityDismissal() {
+    context.packageManager.setComponentEnabledSetting(
+      ComponentName(context, Activity::class.java),
+      PackageManager.COMPONENT_ENABLED_STATE_DISABLED,
+      PackageManager.DONT_KILL_APP,
+    )
+    assertEquals(null, context.packageManager.getLaunchIntentForPackage(context.packageName))
+
+    AgentNotifications.receive(context, update("waiting", true) + mapOf(
+      "activity_phase" to "waiting_for_approval",
+      "activity_title" to "Approval needed",
+    ))
+    val alert = manager.activeNotifications.single { it.tag == "t3-agent-alert" }.notification
+    val card = manager.activeNotifications.single { it.tag == "t3-agent-activity" }.notification
+    assertEquals(null, alert.contentIntent)
+    assertEquals(null, card.contentIntent)
+    assertEquals("Approval needed", card.extras.getString(Notification.EXTRA_TITLE))
+    assertEquals("Dismiss", card.actions.single().title.toString())
+    AgentActivityDismissReceiver().onReceive(context, shadowOf(card.actions.single().actionIntent).savedIntent)
+    assertTrue(manager.activeNotifications.all { it.tag == "t3-agent-alert" })
   }
 
   @Test
