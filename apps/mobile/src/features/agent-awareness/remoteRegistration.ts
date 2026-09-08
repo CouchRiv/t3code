@@ -265,9 +265,6 @@ function nativePushTokenRegistration(observedPushToken?: string) {
     if (!canRegisterPushNotifications() || !supportsAgentAwarenessPush()) {
       return { notificationsEnabled: false, pushToken: null };
     }
-    if (observedPushToken) {
-      return { notificationsEnabled: true, pushToken: observedPushToken };
-    }
     const permissions = yield* Effect.tryPromise({
       try: () => Notifications.getPermissionsAsync(),
       catch: (cause) =>
@@ -278,6 +275,10 @@ function nativePushTokenRegistration(observedPushToken?: string) {
     });
     if (!permissions.granted) {
       return { notificationsEnabled: false, pushToken: null };
+    }
+    // A token can rotate after notification permission has been revoked.
+    if (observedPushToken) {
+      return { notificationsEnabled: true, pushToken: observedPushToken };
     }
     const token = yield* Effect.tryPromise({
       try: () => Notifications.getDevicePushTokenAsync(),

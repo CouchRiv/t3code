@@ -258,6 +258,11 @@ const runBackgroundOperations = Effect.fn("TestRemoteRegistration.runBackgroundO
 describe("makeRelayDeviceRegistrationRequest", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
+    vi.mocked(Notifications.getPermissionsAsync)
+      .mockReset()
+      .mockResolvedValue({
+        granted: true,
+      } as Notifications.NotificationPermissionsStatus);
     vi.mocked(Notifications.getDevicePushTokenAsync).mockResolvedValue({
       type: "ios",
       data: "apns-token",
@@ -997,6 +1002,88 @@ describe("makeRelayDeviceRegistrationRequest", () => {
       expect(saveAgentAwarenessRegistrationRecord).not.toHaveBeenCalled();
     }).pipe(Effect.provide(relayTestLayer));
   });
+
+  for (const platform of ["android", "ios"] as const) {
+    for (const permission of ["granted", "denied", "unavailable"] as const) {
+      it.effect(`honors ${permission} permission during ${platform} token rotation`, () => {
+        vi.spyOn(Platform, "OS", "get").mockReturnValue(platform);
+        vi.spyOn(Platform, "Version", "get").mockReturnValue(platform === "android" ? 36 : "18.0");
+        vi.mocked(Notifications.getDevicePushTokenAsync).mockResolvedValue({
+          type: platform,
+          data: "initial-push-token",
+        });
+        const registrations: unknown[] = [];
+        const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+          const url = input instanceof Request ? input.url : String(input);
+          if (url.endsWith("/v1/mobile/devices")) {
+            registrations.push(
+              await (input instanceof Request ? input : new Response(init?.body)).json(),
+            );
+          }
+          return Response.json(
+            url.endsWith("/v1/client/dpop-token")
+              ? {
+                  access_token: "relay-dpop-token",
+                  issued_token_type: "urn:ietf:params:oauth:token-type:access_token",
+                  token_type: "DPoP",
+                  expires_in: 300,
+                  scope: "mobile:registration",
+                }
+              : { ok: true },
+          );
+        });
+        const testLayer = relayTestLayer.pipe(
+          Layer.provide(Layer.succeed(FetchHttpClient.Fetch, fetchMock)),
+          Layer.fresh,
+        );
+        Constants.expoConfig!.extra = { relay: { url: "https://relay.example.test" } };
+        setAgentAwarenessRelayTokenProvider(() => Promise.resolve("clerk-token-user-a"), "user-a");
+
+        return Effect.gen(function* () {
+          yield* runBackgroundOperations();
+          expect(registrations).toHaveLength(1);
+          expect(registrations[0]).toMatchObject({
+            pushToken: "initial-push-token",
+            preferences: { notificationsEnabled: true },
+          });
+          registrations.length = 0;
+          vi.mocked(Notifications.getDevicePushTokenAsync).mockClear();
+          if (permission === "unavailable") {
+            vi.mocked(Notifications.getPermissionsAsync).mockRejectedValueOnce(
+              new Error("Permission lookup failed"),
+            );
+          } else {
+            vi.mocked(Notifications.getPermissionsAsync).mockResolvedValueOnce({
+              granted: permission === "granted",
+            } as Notifications.NotificationPermissionsStatus);
+          }
+          const tokenListener = vi
+            .mocked(Notifications.addPushTokenListener)
+            .mock.calls.at(-1)?.[0];
+          expect(tokenListener).toBeDefined();
+          tokenListener?.({ type: platform, data: "rotated-push-token" });
+          yield* runBackgroundOperations();
+
+          if (permission === "unavailable") {
+            expect(registrations).toHaveLength(0);
+            expect(getAgentAwarenessRegistrationStatus()).toBe("registered");
+          } else {
+            expect(registrations).toHaveLength(1);
+            expect(registrations[0]).toMatchObject({
+              platform,
+              preferences: { notificationsEnabled: permission === "granted" },
+            });
+            if (permission === "granted") {
+              expect(registrations[0]).toMatchObject({ pushToken: "rotated-push-token" });
+            } else {
+              expect(registrations[0]).not.toHaveProperty("pushToken");
+            }
+          }
+          expect(Notifications.getDevicePushTokenAsync).not.toHaveBeenCalled();
+        }).pipe(Effect.provide(testLayer));
+      });
+    }
+  }
 
   it.effect("registers an Android FCM token without invoking Apple Live Activities", () => {
     vi.spyOn(Platform, "OS", "get").mockReturnValue("android");
