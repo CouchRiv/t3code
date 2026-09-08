@@ -14,13 +14,14 @@ import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 
-import { RelayConfiguration } from "../Config.ts";
-import { RelayDb } from "../db.ts";
+import * as RelayConfiguration from "../Config.ts";
+import * as RelayDb from "../db.ts";
 import { relayMobileDevices } from "../persistence/schema.ts";
-import { EnvironmentLinks } from "../environments/EnvironmentLinks.ts";
-import { AgentActivityRows } from "./AgentActivityRows.ts";
-import { LiveActivities, type TargetRow } from "./LiveActivities.ts";
-import { FcmClient } from "./FcmClient.ts";
+import * as EnvironmentLinks from "../environments/EnvironmentLinks.ts";
+import * as AgentActivityRows from "./AgentActivityRows.ts";
+import * as LiveActivities from "./LiveActivities.ts";
+import type { TargetRow } from "./LiveActivities.ts";
+import * as FcmClient from "./FcmClient.ts";
 import { androidActivityData, androidActivityHero, fitFcmData } from "./fcmPayloads.ts";
 import { makeAggregateState, statusForPhase } from "./agentActivityAggregate.ts";
 import { isExpiredAgentActivityState, notificationForActivity } from "./agentActivityPayloads.ts";
@@ -139,13 +140,13 @@ export function androidAlertForAggregate(input: {
 }
 
 export const make = Effect.gen(function* () {
-  const config = yield* RelayConfiguration;
+  const config = yield* RelayConfiguration.RelayConfiguration;
   const sender = yield* FcmDeliveryQueueSender;
-  const client = yield* FcmClient;
-  const devices = yield* LiveActivities;
-  const rows = yield* AgentActivityRows;
-  const links = yield* EnvironmentLinks;
-  const db = yield* RelayDb;
+  const client = yield* FcmClient.FcmClient;
+  const devices = yield* LiveActivities.LiveActivities;
+  const rows = yield* AgentActivityRows.AgentActivityRows;
+  const links = yield* EnvironmentLinks.EnvironmentLinks;
+  const db = yield* RelayDb.RelayDb;
 
   return FcmDeliveries.of({
     enqueue: Effect.fn("relay.fcm.enqueue")(function* (input) {
