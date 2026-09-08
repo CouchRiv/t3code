@@ -564,6 +564,41 @@ describe("Android delivery routing", () => {
     }).pipe(Effect.provide(h.layer));
   });
 
+  for (const phase of ["waiting_for_approval", "waiting_for_input"] as const) {
+    it.effect(`keeps ${phase} visible when five newer agents are running`, () => {
+      const h = harness();
+      const running = Array.from({ length: 5 }, (_, index) => ({
+        ...state,
+        threadId: ThreadId.make(`running-${index}`),
+        updatedAt: "1970-01-01T00:00:01.000Z",
+      }));
+      const waiting: RelayAgentActivityState = {
+        ...state,
+        threadId: ThreadId.make("waiting"),
+        threadTitle: "Needs your response",
+        phase,
+        deepLink: "/threads/env/waiting",
+      };
+      h.current.state = running[0]!;
+      h.current.otherStates = [...running.slice(1), waiting];
+      h.current.target.last_aggregate_json = encodeJson(aggregateFor(running));
+      return Effect.gen(function* () {
+        yield* TestClock.adjust("1 second");
+        const delivery = yield* FcmDeliveries;
+        yield* delivery.process({ ...h.job, state: waiting });
+        expect(h.sent).toHaveLength(1);
+        expect(h.sent[0]?.alert).toBe(true);
+        expect(h.sent[0]?.data.activity_title).toBe("6 active agents · 1 needs attention");
+        expect(h.sent[0]?.data.activity_line_0).toContain("\tNeeds your response\tProject");
+        expect(h.sent[0]?.data.activity_path).toBe(waiting.deepLink);
+        expect(h.sent[0]?.data.alert_path).toBe(waiting.deepLink);
+        expect(
+          Object.keys(h.sent[0]!.data).filter((key) => key.startsWith("activity_line_")),
+        ).toHaveLength(5);
+      }).pipe(Effect.provide(h.layer));
+    });
+  }
+
   it("shows five rows with attention then failure first, including project and status", () => {
     const aggregate = aggregateFor([
       state,

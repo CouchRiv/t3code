@@ -80,9 +80,13 @@ export function makeAggregateState(input: {
   readonly terminalState: RelayAgentActivityState | null;
   readonly nowMs: number;
 }): RelayAgentActivityAggregateState | null {
-  const activeStates = input.activeStates.filter(
-    (state) => !isTerminalPhase(state) && !isExpiredAgentActivityState(state, input.nowMs),
-  );
+  const needsAttention = (state: RelayAgentActivityState) =>
+    state.phase === "waiting_for_approval" || state.phase === "waiting_for_input";
+  // Select attention rows before applying the display cap. Sorting the final
+  // payload cannot recover a waiting agent displaced by newer running agents.
+  const activeStates = input.activeStates
+    .filter((state) => !isTerminalPhase(state) && !isExpiredAgentActivityState(state, input.nowMs))
+    .sort((a, b) => Number(needsAttention(b)) - Number(needsAttention(a)));
   if (activeStates.length === 0) {
     if (input.terminalState !== null) {
       return terminalAggregateState(input.terminalState);
