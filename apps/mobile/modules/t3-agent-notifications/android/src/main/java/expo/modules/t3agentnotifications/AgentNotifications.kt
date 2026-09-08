@@ -19,6 +19,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.ProcessLifecycleOwner
 import com.google.firebase.messaging.RemoteMessage
 import expo.modules.notifications.service.ExpoFirebaseMessagingService
+import org.json.JSONArray
 
 class AgentMessagingService : ExpoFirebaseMessagingService() {
   override fun onMessageReceived(remoteMessage: RemoteMessage) {
@@ -134,7 +135,11 @@ object AgentNotifications {
     // Queue retries carry the same alert id. Keep a bounded history even when
     // notification A is retried after notification B has already arrived.
     val alertId = data["alert_id"]
-    val seen = prefs.getStringSet("seenAlerts", emptySet()).orEmpty()
+    // Keep a new key so upgrades can still read the old, unordered StringSet.
+    val seen = prefs.getString("seenAlertsOrdered", null)?.let { value ->
+      val history = JSONArray(value)
+      List(history.length()) { history.getString(it) }
+    } ?: prefs.getStringSet("seenAlerts", emptySet()).orEmpty().toList()
     if (alertId != null && alertId !in seen) {
       // Match iOS foreground presentation. Consume suppressed alerts as well,
       // so a delivery retry cannot surface them after the app backgrounds.
@@ -151,10 +156,10 @@ object AgentNotifications {
           .build()
         manager(context).notify(ALERT_TAG, id, notification)
       }
-      prefs.edit().putStringSet(
-        "seenAlerts",
-        (seen.toList().takeLast(63) + alertId).toSet()
-      ).apply()
+      prefs.edit().putString(
+        "seenAlertsOrdered",
+        JSONArray(seen.takeLast(63) + alertId).toString()
+      ).remove("seenAlerts").apply()
     }
   }
 

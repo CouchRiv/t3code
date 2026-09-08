@@ -112,6 +112,40 @@ class AgentNotificationsTest {
   }
 
   @Test
+  fun recentSuppressedAlertsStaySilentAfterHistoryRollsOverAndTheAppReopens() {
+    lifecycle.currentState = Lifecycle.State.RESUMED
+    for (index in 0..79) {
+      AgentNotifications.receive(context, update("completion-$index", false))
+    }
+    AgentNotifications.configure(context, "device", "user", "t3code-dev", true)
+    lifecycle.currentState = Lifecycle.State.CREATED
+    for (index in 16..79) {
+      AgentNotifications.receive(context, update("completion-$index", false))
+    }
+    assertTrue(manager.activeNotifications.isEmpty())
+
+    AgentNotifications.receive(context, update("new-completion", false))
+    assertEquals("new-completion".hashCode(), manager.activeNotifications.single().id)
+  }
+
+  @Test
+  fun upgradingAlertHistoryPreservesOldRetriesAndStoresNewAlerts() {
+    context.getSharedPreferences("t3-agent-notifications", Application.MODE_PRIVATE).edit()
+      .putStringSet("seenAlerts", setOf("old-completion", "other-completion")).commit()
+    AgentNotifications.receive(context, update("old-completion", false))
+    assertTrue(manager.activeNotifications.isEmpty())
+
+    lifecycle.currentState = Lifecycle.State.RESUMED
+    AgentNotifications.receive(context, update("new-completion", false))
+    AgentNotifications.configure(context, "device", "user", "t3code-dev", true)
+    lifecycle.currentState = Lifecycle.State.CREATED
+    for (id in listOf("old-completion", "other-completion", "new-completion")) {
+      AgentNotifications.receive(context, update(id, false))
+    }
+    assertTrue(manager.activeNotifications.isEmpty())
+  }
+
+  @Test
   fun returningToForegroundSuppressesNewAlertsWithoutRemovingPreviousOnes() {
     AgentNotifications.receive(context, update("background-completion", false))
     lifecycle.currentState = Lifecycle.State.RESUMED
