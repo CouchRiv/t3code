@@ -243,6 +243,67 @@ class AgentNotificationsTest {
   }
 
   @Test
+  fun activityActionOpensTheDisplayedThreadWithAnOlderRelay() {
+    lifecycle.currentState = Lifecycle.State.RESUMED
+    AgentNotifications.receive(context, update("work", true))
+
+    val card = manager.activeNotifications.single().notification
+    assertEquals("Open thread", card.actions[0].title.toString())
+    assertEquals(card.contentIntent, card.actions[0].actionIntent)
+    card.actions[0].actionIntent.send()
+    assertEquals(
+      "t3code-dev://threads/environment/thread",
+      shadowOf(context).nextStartedActivity.dataString
+    )
+    assertEquals("Dismiss", card.actions[1].title.toString())
+    assertEquals(card.deleteIntent, card.actions[1].actionIntent)
+  }
+
+  @Test
+  fun reviewActionFollowsTheNewPriorityThreadAndClearsWhenItResumes() {
+    lifecycle.currentState = Lifecycle.State.RESUMED
+    val waiting = update("approval", true) + mapOf(
+      "activity_title" to "Approval needed",
+      "activity_subtext" to "2 active agents",
+      "activity_phase" to "waiting_for_approval",
+    )
+    AgentNotifications.receive(context, waiting)
+    val first = manager.activeNotifications.single().notification
+    assertEquals("Review", first.actions[0].title.toString())
+    assertEquals("2 active agents", first.extras.getString(Notification.EXTRA_SUB_TEXT))
+
+    AgentNotifications.receive(context, waiting + ("activity_path" to "/threads/other/approval"))
+    val second = manager.activeNotifications.single().notification
+    second.actions[0].actionIntent.send()
+    assertEquals(
+      "t3code-dev://threads/other/approval",
+      shadowOf(context).nextStartedActivity.dataString
+    )
+
+    AgentNotifications.receive(context, update("resumed", true) + mapOf(
+      "activity_phase" to "running",
+      "activity_subtext" to "",
+    ))
+    val resumed = manager.activeNotifications.single().notification
+    assertEquals("Open thread", resumed.actions[0].title.toString())
+    assertTrue(resumed.extras.getString(Notification.EXTRA_SUB_TEXT).isNullOrEmpty())
+  }
+
+  @Test
+  fun inputAndTerminalCardsOfferNavigationWithoutAnApprovalAction() {
+    lifecycle.currentState = Lifecycle.State.RESUMED
+    for (phase in listOf("waiting_for_input", "completed", "failed", "future_phase")) {
+      AgentNotifications.receive(context, update(phase, phase == "waiting_for_input") + mapOf(
+        "activity_phase" to phase,
+        "activity_expires_at" to (System.currentTimeMillis() + 900000).toString(),
+      ))
+      val card = manager.activeNotifications.single().notification
+      assertEquals("Open thread", card.actions[0].title.toString())
+      assertEquals(card.contentIntent, card.actions[0].actionIntent)
+    }
+  }
+
+  @Test
   fun missingLauncherStillDisplaysAlertsAndOffersActivityDismissal() {
     context.packageManager.setComponentEnabledSetting(
       ComponentName(context, Activity::class.java),

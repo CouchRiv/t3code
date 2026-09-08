@@ -588,7 +588,7 @@ describe("Android delivery routing", () => {
         yield* delivery.process({ ...h.job, state: waiting });
         expect(h.sent).toHaveLength(1);
         expect(h.sent[0]?.alert).toBe(true);
-        expect(h.sent[0]?.data.activity_title).toBe("6 active agents · 1 needs attention");
+        expect(h.sent[0]?.data.activity_subtext).toBe("6 active agents");
         expect(h.sent[0]?.data.activity_line_0).toContain("\tNeeds your response\tProject");
         expect(h.sent[0]?.data.activity_path).toBe(waiting.deepLink);
         expect(h.sent[0]?.data.alert_path).toBe(waiting.deepLink);
@@ -608,7 +608,8 @@ describe("Android delivery routing", () => {
       { ...state, threadId: ThreadId.make("done"), phase: "completed" },
     ]);
     const data = androidActivityData(aggregate);
-    expect(data.activity_title).toBe("3 active agents · 2 need attention");
+    expect(data.activity_title).toBe("Agents need attention");
+    expect(data.activity_subtext).toBe("3 active agents");
     expect(
       Object.entries(data)
         .filter(([key]) => key.startsWith("activity_line_"))

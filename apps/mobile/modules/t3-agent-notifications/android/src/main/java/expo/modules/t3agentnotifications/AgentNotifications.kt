@@ -215,17 +215,21 @@ object AgentNotifications {
     val style = NotificationCompat.BigTextStyle().bigText(
       if (lines.isEmpty()) body else lines.joinToString("\n")
     )
+    val openIntent = contentIntent(context, scheme, data["activity_path"], ACTIVITY_ID)
+    val openLabel = if (data["activity_phase"] == "waiting_for_approval") "Review" else "Open thread"
     val notification = base(context, ACTIVITY_CHANNEL)
       .setContentTitle(data["activity_title"].orEmpty().take(120))
       .setContentText(body)
+      .setSubText(data["activity_subtext"]?.takeIf { it.isNotBlank() }?.take(120))
       .setStyle(style)
       .setOngoing(active).setOnlyAlertOnce(true).setSilent(true)
       .setTimeoutAfter(remainingMs)
       // Live Updates must remain uncolorized to qualify for promotion.
       .setColorized(false)
       .setRequestPromotedOngoing(active)
-      .setContentIntent(contentIntent(context, scheme, data["activity_path"], ACTIVITY_ID))
+      .setContentIntent(openIntent)
       .setDeleteIntent(dismissIntent)
+      .apply { if (openIntent != null) addAction(0, openLabel, openIntent) }
       .addAction(0, "Dismiss", dismissIntent)
       .build()
     manager(context).notify(ACTIVITY_TAG, ACTIVITY_ID, notification)

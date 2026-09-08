@@ -27,12 +27,15 @@ export function androidActivityData(aggregate: RelayAgentActivityAggregateState 
     [row.status, clean(row.threadTitle), clean(row.projectTitle)].join("\t"),
   );
   const hero = rows[0];
-  const title =
-    activeCount > 0
-      ? `${activeCount} active agent${activeCount === 1 ? "" : "s"}${attentionCount ? ` · ${attentionCount} need${attentionCount === 1 ? "s" : ""} attention` : ""}`
-      : failed
-        ? "Agent work failed"
-        : "Agent work completed";
+  const activeTitle = `${activeCount} active agent${activeCount === 1 ? "" : "s"}`;
+  let title = activeCount > 0 ? activeTitle : failed ? "Agent work failed" : "Agent work completed";
+  if (attentionCount > 1) {
+    title = "Agents need attention";
+  } else if (hero?.phase === "waiting_for_approval") {
+    title = "Approval needed";
+  } else if (hero?.phase === "waiting_for_input") {
+    title = "Response needed";
+  }
   const expiresAt = Math.max(
     0,
     ...rows.map((row) =>
@@ -44,6 +47,8 @@ export function androidActivityData(aggregate: RelayAgentActivityAggregateState 
   return {
     active: String(activeCount > 0),
     activity_title: title,
+    activity_subtext: attentionCount > 0 ? activeTitle : "",
+    activity_phase: hero?.phase ?? "",
     activity_body: hero
       ? `${hero.status}: ${clean(hero.threadTitle)} · ${clean(hero.projectTitle)}`
       : "",
