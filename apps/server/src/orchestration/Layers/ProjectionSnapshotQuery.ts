@@ -2008,6 +2008,7 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
                 branch: row.branch,
                 worktreePath: row.worktreePath,
                 branchPullRequest: row.branchPullRequest,
+                pullRequests: [],
                 ...(row.linkedPullRequest === null
                   ? {}
                   : { linkedPullRequest: row.linkedPullRequest }),
@@ -2223,6 +2224,7 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
                   branch: row.branch,
                   worktreePath: row.worktreePath,
                   branchPullRequest: row.branchPullRequest,
+                  pullRequests: [],
                   ...(row.linkedPullRequest === null
                     ? {}
                     : { linkedPullRequest: row.linkedPullRequest }),
@@ -2363,6 +2365,7 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
                         branch: row.branch,
                         worktreePath: row.worktreePath,
                         branchPullRequest: row.branchPullRequest,
+                        pullRequests: [],
                         ...(row.linkedPullRequest === null
                           ? {}
                           : { linkedPullRequest: row.linkedPullRequest }),
@@ -2522,6 +2525,7 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
                 interactionMode: row.interactionMode,
                 branch: row.branch,
                 worktreePath: row.worktreePath,
+                pullRequests: [],
                 latestTurn: latestTurnByThread.get(row.threadId) ?? null,
                 createdAt: row.createdAt,
                 updatedAt: row.updatedAt,
@@ -2859,6 +2863,7 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
         branch: threadRow.value.branch,
         worktreePath: threadRow.value.worktreePath,
         branchPullRequest: threadRow.value.branchPullRequest,
+        pullRequests: [],
         ...(threadRow.value.linkedPullRequest === null
           ? {}
           : { linkedPullRequest: threadRow.value.linkedPullRequest }),
@@ -3067,6 +3072,7 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
         branch: threadRow.value.branch,
         worktreePath: threadRow.value.worktreePath,
         branchPullRequest: threadRow.value.branchPullRequest,
+        pullRequests: [],
         ...(threadRow.value.linkedPullRequest === null
           ? {}
           : { linkedPullRequest: threadRow.value.linkedPullRequest }),
