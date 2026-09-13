@@ -93,7 +93,16 @@ const UNRENDERABLE_MARKDOWN = [
   /^ {0,3}<[a-zA-Z!/]/m, // raw HTML blocks
 ];
 
+/**
+ * The check parses and re-serializes the whole file on the render that opens
+ * it: about 20 ms at this size, 225 ms at the 1 MB the preview will load. A
+ * document this long is a poor fit for editing in a preview panel anyway, so
+ * past here it stays rendered and the source view does the editing.
+ */
+const MAX_IN_PLACE_EDITING_CHARACTERS = 64 * 1024;
+
 export function markdownSupportsInPlaceEditing(text: string): boolean {
+  if (text.length > MAX_IN_PLACE_EDITING_CHARACTERS) return false;
   if (UNRENDERABLE_MARKDOWN.some((pattern) => pattern.test(text))) return false;
   return markdownRoundTrip(text) === text.replace(/\n+$/, "");
 }

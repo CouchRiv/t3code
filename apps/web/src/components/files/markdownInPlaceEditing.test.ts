@@ -48,6 +48,14 @@ describe("markdownSupportsInPlaceEditing", () => {
     expect(markdownSupportsInPlaceEditing(text)).toBe(false);
   });
 
+  it("leaves a long file to the preview rather than parsing it on open", () => {
+    const paragraph = "Ordinary prose about the change and why it matters.\n\n";
+    const long = paragraph.repeat(Math.ceil((64 * 1024) / paragraph.length) + 1);
+
+    expect(markdownRoundTrip(long)).toBe(long.replace(/\n+$/, ""));
+    expect(markdownSupportsInPlaceEditing(long)).toBe(false);
+  });
+
   it.each([
     ["a table", "| Surface | Ships |\n| --- | --- |\n| web | yes |\n"],
     ["an image", "![diagram](./diagram.png)\n"],
