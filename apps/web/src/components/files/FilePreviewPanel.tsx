@@ -56,6 +56,7 @@ import { BrowserDocumentFrame, isPdfPreviewFile } from "./BrowserDocumentFrame";
 import { DelimitedTablePreview } from "./DelimitedTablePreview";
 import FileBrowserPanel from "./FileBrowserPanel";
 import { FileBreadcrumbs } from "./FileBreadcrumbs";
+import { FileMarkdownEditor } from "./FileMarkdownEditor";
 import { FileMarkdownPreview } from "./FileMarkdownPreview";
 import {
   type FileCommentAnnotationEntry,
@@ -79,17 +80,9 @@ import SourceFilePreview from "./ReadOnlySourcePreview";
 import { resolveCenteredFileLineScrollTop } from "./fileLineReveal";
 import { DiffCommentAnnotation } from "../diffs/DiffCommentAnnotation";
 import { projectFileCacheKey, projectFileEditorCacheKey } from "./fileContentRevision";
-import {
-  isMarkdownPreviewFile,
-  setMarkdownTaskChecked,
-  shouldShowFileExplorer,
-} from "./filePreviewMode";
+import { isMarkdownPreviewFile, shouldShowFileExplorer } from "./filePreviewMode";
 import { useFileSaveCoordinator } from "./useFileSaveCoordinator";
-import {
-  getOptimisticProjectFileQueryData,
-  setProjectFileQueryData,
-  useProjectFileQuery,
-} from "./projectFilesQueryState";
+import { setProjectFileQueryData, useProjectFileQuery } from "./projectFilesQueryState";
 
 interface FilePreviewPanelProps {
   environmentId: EnvironmentId;
@@ -865,25 +858,22 @@ function RenderedMarkdownSurface({
 
   return (
     <ScrollArea className="min-h-0 flex-1">
-      <FileMarkdownPreview
-        text={contents}
-        cwd={cwd}
-        relativePath={relativePath}
-        threadRef={threadRef}
-        onTaskListChange={
-          readOnly
-            ? undefined
-            : ({ markerOffset, checked }) => {
-                const currentContents =
-                  getOptimisticProjectFileQueryData(environmentId, cwd, relativePath)?.contents ??
-                  contents;
-                const nextContents = setMarkdownTaskChecked(currentContents, markerOffset, checked);
-                if (nextContents === currentContents) return;
-                setProjectFileQueryData(environmentId, cwd, relativePath, nextContents);
-                saveCoordinator.change(nextContents);
-              }
-        }
-      />
+      {readOnly ? (
+        <FileMarkdownPreview
+          text={contents}
+          cwd={cwd}
+          relativePath={relativePath}
+          threadRef={threadRef}
+        />
+      ) : (
+        <FileMarkdownEditor
+          text={contents}
+          onChange={(nextContents) => {
+            setProjectFileQueryData(environmentId, cwd, relativePath, nextContents);
+            saveCoordinator.change(nextContents);
+          }}
+        />
+      )}
     </ScrollArea>
   );
 }
