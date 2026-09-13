@@ -887,6 +887,35 @@ describe("ChatMarkdown source line stamps", () => {
     expect(sourceLineSpan(html, "second")).toEqual({ start: 7, end: 7 });
   });
 
+  it("does not stamp a block whose lines were fabricated by an earlier plugin", () => {
+    // `remarkNormalizeListItemIndentation` re-parses over-indented list content
+    // as its own document, so every block after the first carries lines from
+    // that fragment: "recovered B" lives on line 7 but claims line 3.
+    const recovered = [
+      "# Title",
+      "",
+      "- Item one",
+      "",
+      "-       recovered A",
+      "",
+      "        recovered B",
+      "",
+      "- Item three",
+    ].join("\n");
+
+    const html = renderToStaticMarkup(
+      <ChatMarkdown
+        cwd="/tmp/project"
+        text={recovered}
+        extraRemarkPlugins={[remarkStampSourceLines]}
+      />,
+    );
+
+    // Unstamped, so a selection there resolves to the list item that holds it.
+    expect(html).toContain("<p>recovered B</p>");
+    expect(html).toContain('<li data-md-start-line="5" data-md-end-line="7">');
+  });
+
   it("leaves markdown unstamped for callers that do not ask for it", () => {
     const html = renderToStaticMarkup(<ChatMarkdown cwd="/tmp/project" text={text} />);
 

@@ -45,33 +45,50 @@ const STAMPED_NODE_TYPES = new Set([
   "thematicBreak",
 ]);
 
+export interface MarkdownSourceLineRange {
+  readonly startLine: number;
+  readonly endLine: number;
+}
+
+function spanOf(node: SourceLineAstNode): MarkdownSourceLineRange | null {
+  const startLine = node.position?.start?.line;
+  const endLine = node.position?.end?.line;
+  return startLine === undefined || endLine === undefined ? null : { startLine, endLine };
+}
+
 export function remarkStampSourceLines() {
   return (tree: SourceLineAstNode) => {
-    const visit = (node: SourceLineAstNode) => {
-      const startLine = node.position?.start?.line;
-      const endLine = node.position?.end?.line;
-      if (STAMPED_NODE_TYPES.has(node.type) && startLine !== undefined && endLine !== undefined) {
+    const visit = (node: SourceLineAstNode, enclosing: MarkdownSourceLineRange | null) => {
+      // A plugin that re-parses part of the document hands back blocks whose
+      // positions belong to that fragment rather than the file — see the
+      // recovery in `remarkNormalizeListItemIndentation`. A span that escapes
+      // the one enclosing it is one of those, and stamping it would point a
+      // quote at whatever happens to live on that line.
+      const span = spanOf(node);
+      const trusted =
+        span !== null &&
+        (enclosing === null ||
+          (span.startLine >= enclosing.startLine && span.endLine <= enclosing.endLine));
+
+      if (trusted && STAMPED_NODE_TYPES.has(node.type)) {
         const data = (node.data ??= {});
         data.hProperties = {
           ...data.hProperties,
-          dataMdStartLine: startLine,
-          dataMdEndLine: endLine,
+          dataMdStartLine: span.startLine,
+          dataMdEndLine: span.endLine,
         };
       }
-      node.children?.forEach(visit);
+
+      const childEnclosing = trusted ? span : enclosing;
+      node.children?.forEach((child) => visit(child, childEnclosing));
     };
 
-    visit(tree);
+    visit(tree, null);
   };
 }
 
 /** Stable identity keeps ChatMarkdown's plugin list from re-rendering the tree. */
 export const MARKDOWN_SOURCE_LINE_PLUGINS = [remarkStampSourceLines];
-
-export interface MarkdownSourceLineRange {
-  readonly startLine: number;
-  readonly endLine: number;
-}
 
 function stampedAncestor(node: Node | null, container: HTMLElement): HTMLElement | null {
   const element = node instanceof Element ? node : (node?.parentElement ?? null);

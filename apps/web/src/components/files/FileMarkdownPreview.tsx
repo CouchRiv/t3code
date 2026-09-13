@@ -104,6 +104,13 @@ export function FileMarkdownPreview(props: FileMarkdownPreviewProps) {
     };
   }, [composerDraftTarget]);
 
+  // Lines were resolved against the text on screen. If the file changes under
+  // the selection — an agent writing to it, a checkbox toggled — they no longer
+  // describe it, so the action starts over with the next selection.
+  useEffect(() => {
+    setQuoteAction(null);
+  }, [props.text]);
+
   const handleQuoteInChat = useCallback(() => {
     if (!quoteAction || !composerDraftTarget) return;
 
