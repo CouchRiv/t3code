@@ -5,8 +5,22 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import ChatMarkdown from "~/components/ChatMarkdown";
 import { Button } from "~/components/ui/button";
 import { type DraftId, useComposerDraftStore } from "~/composerDraftStore";
+import { randomUUID } from "~/lib/utils";
 import { buildFileReviewComment } from "~/reviewCommentContext";
 import { resolvePathLinkTarget } from "~/terminal-links";
+
+import { MARKDOWN_SOURCE_LINE_PLUGINS, resolveSelectionSourceLines } from "./markdownSourceLines";
+
+/** Height of the action plus the gap that keeps it clear of the selection. */
+const QUOTE_ACTION_OFFSET = 42;
+
+interface QuoteAction {
+  readonly text: string;
+  readonly startLine: number;
+  readonly endLine: number;
+  readonly top: number;
+  readonly left: number;
+}
 
 export interface FileMarkdownPreviewProps {
   readonly cwd: string;
@@ -22,11 +36,7 @@ export interface FileMarkdownPreviewProps {
 export function FileMarkdownPreview(props: FileMarkdownPreviewProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const addReviewComment = useComposerDraftStore((store) => store.addReviewComment);
-  const [floatingAction, setFloatingAction] = useState<{
-    text: string;
-    top: number;
-    left: number;
-  } | null>(null);
+  const [quoteAction, setQuoteAction] = useState<QuoteAction | null>(null);
 
   const lastSeparator = Math.max(
     props.relativePath.lastIndexOf("/"),
@@ -37,106 +47,104 @@ export function FileMarkdownPreview(props: FileMarkdownPreviewProps) {
       ? resolvePathLinkTarget(props.relativePath.slice(0, lastSeparator), props.cwd)
       : props.cwd;
 
-  const updateSelection = useCallback(() => {
-    if (!props.composerDraftTarget || !containerRef.current) {
-      setFloatingAction(null);
-      return;
-    }
+  const composerDraftTarget = props.composerDraftTarget;
 
-    const selection = window.getSelection();
-    if (!selection || selection.isCollapsed || selection.rangeCount === 0) {
-      setFloatingAction(null);
-      return;
-    }
-
-    const selectedText = selection.toString().trim();
-    if (!selectedText) {
-      setFloatingAction(null);
-      return;
-    }
-
-    const range = selection.getRangeAt(0);
-    const container = containerRef.current;
-    if (!container.contains(range.commonAncestorContainer)) {
-      setFloatingAction(null);
-      return;
-    }
-
-    const rect = range.getBoundingClientRect();
-    const containerRect = container.getBoundingClientRect();
-
-    setFloatingAction({
-      text: selectedText,
-      top: Math.max(0, rect.top - containerRect.top + container.scrollTop - 42),
-      left: Math.max(12, rect.left - containerRect.left + container.scrollLeft + rect.width / 2 - 60),
-    });
-  }, [props.composerDraftTarget]);
-
+  // Reading the selection covers every way to make one: dragging, shift+arrows,
+  // and a touch handle. Quoting needs the lines the selection came from, so a
+  // selection the preview cannot place offers no action rather than a wrong one.
   useEffect(() => {
-    const handleDocumentSelectionChange = () => {
+    if (!composerDraftTarget) {
+      setQuoteAction(null);
+      return;
+    }
+
+    let frame: number | null = null;
+    const readSelection = () => {
+      frame = null;
+      const container = containerRef.current;
       const selection = window.getSelection();
-      if (!selection || selection.isCollapsed) {
-        setFloatingAction(null);
+      if (!container || !selection || selection.isCollapsed || selection.rangeCount === 0) {
+        setQuoteAction(null);
+        return;
       }
+
+      const text = selection.toString().trim();
+      const range = selection.getRangeAt(0);
+      if (!text || !container.contains(range.commonAncestorContainer)) {
+        setQuoteAction(null);
+        return;
+      }
+
+      const lines = resolveSelectionSourceLines(range, container);
+      if (!lines) {
+        setQuoteAction(null);
+        return;
+      }
+
+      const rect = range.getBoundingClientRect();
+      const containerRect = container.getBoundingClientRect();
+      setQuoteAction({
+        text,
+        startLine: lines.startLine,
+        endLine: lines.endLine,
+        top: Math.max(0, rect.top - containerRect.top - QUOTE_ACTION_OFFSET),
+        left: rect.left - containerRect.left + rect.width / 2,
+      });
     };
-    document.addEventListener("selectionchange", handleDocumentSelectionChange);
+
+    const handleSelectionChange = () => {
+      // A drag fires this per pointer move; one read per frame is enough.
+      if (frame === null) frame = requestAnimationFrame(readSelection);
+    };
+
+    document.addEventListener("selectionchange", handleSelectionChange);
     return () => {
-      document.removeEventListener("selectionchange", handleDocumentSelectionChange);
+      document.removeEventListener("selectionchange", handleSelectionChange);
+      if (frame !== null) cancelAnimationFrame(frame);
     };
-  }, []);
+  }, [composerDraftTarget]);
 
   const handleQuoteInChat = useCallback(() => {
-    if (!floatingAction || !props.composerDraftTarget) return;
-
-    const selectedText = floatingAction.text;
-    const contents = props.text;
-    const index = contents.indexOf(selectedText);
-    let startLine = 1;
-    let endLine = 1;
-
-    if (index >= 0) {
-      const preceding = contents.slice(0, index);
-      startLine = preceding.split("\n").length;
-      endLine = startLine + selectedText.split("\n").length - 1;
-    }
+    if (!quoteAction || !composerDraftTarget) return;
 
     addReviewComment(
-      props.composerDraftTarget,
+      composerDraftTarget,
       buildFileReviewComment({
-        id: crypto.randomUUID(),
+        id: randomUUID(),
         filePath: props.relativePath,
-        startLine,
-        endLine,
-        text: selectedText,
-        contents,
+        startLine: quoteAction.startLine,
+        endLine: quoteAction.endLine,
+        text: quoteAction.text,
+        contents: props.text,
       }),
     );
 
-    setFloatingAction(null);
+    setQuoteAction(null);
     window.getSelection()?.removeAllRanges();
-  }, [addReviewComment, floatingAction, props.composerDraftTarget, props.relativePath, props.text]);
+  }, [addReviewComment, composerDraftTarget, props.relativePath, props.text, quoteAction]);
 
   return (
-    <div ref={containerRef} className="relative min-h-full w-full" onMouseUp={updateSelection}>
-      {floatingAction ? (
+    <div ref={containerRef} className="relative min-h-full w-full">
+      {quoteAction ? (
         <div
-          style={{
-            transform: `translate3d(${floatingAction.left}px, ${floatingAction.top}px, 0)`,
-          }}
-          className="pointer-events-auto absolute left-0 top-0 z-20"
+          style={{ transform: `translate3d(${quoteAction.left}px, ${quoteAction.top}px, 0)` }}
+          className="absolute top-0 left-0 z-20"
         >
-          <Button
-            size="xs"
-            variant="secondary"
-            className="flex items-center gap-1.5 rounded-full border border-border bg-popover/95 px-3 py-1 shadow-lg backdrop-blur hover:bg-accent"
-            onMouseDown={(event) => {
-              event.preventDefault();
-            }}
-            onClick={handleQuoteInChat}
-          >
-            <MessageSquareQuote className="h-3.5 w-3.5 text-primary" />
-            <span className="text-xs font-medium">Quote in chat</span>
-          </Button>
+          <div className="-translate-x-1/2">
+            <Button
+              size="xs"
+              variant="secondary"
+              className="rounded-full shadow-lg"
+              onMouseDown={(event) => {
+                // Keep the selection alive through the click that quotes it.
+                event.preventDefault();
+              }}
+              onClick={handleQuoteInChat}
+            >
+              <MessageSquareQuote />
+              Quote in chat
+            </Button>
+          </div>
         </div>
       ) : null}
 
@@ -146,6 +154,7 @@ export function FileMarkdownPreview(props: FileMarkdownPreviewProps) {
         imageBaseDir={imageBaseDir}
         threadRef={props.threadRef}
         className="mx-auto max-w-4xl px-6 py-5"
+        extraRemarkPlugins={MARKDOWN_SOURCE_LINE_PLUGINS}
         onTaskListChange={props.onTaskListChange}
       />
     </div>
