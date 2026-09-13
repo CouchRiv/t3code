@@ -1,14 +1,5 @@
-﻿import { AutoLinkNode, LinkNode } from "@lexical/link";
-import { ListItemNode, ListNode } from "@lexical/list";
-import { CodeHighlightNode, CodeNode, registerCodeHighlighting } from "@lexical/code";
-import {
-  $convertFromMarkdownString,
-  $convertToMarkdownString,
-  CHECK_LIST,
-  TRANSFORMERS,
-  type ElementTransformer,
-  type Transformer,
-} from "@lexical/markdown";
+import { registerCodeHighlighting } from "@lexical/code";
+import { $convertFromMarkdownString, $convertToMarkdownString } from "@lexical/markdown";
 import { AutoFocusPlugin } from "@lexical/react/LexicalAutoFocusPlugin";
 import { AutoLinkPlugin, createLinkMatcherWithRegExp } from "@lexical/react/LexicalAutoLinkPlugin";
 import { CheckListPlugin } from "@lexical/react/LexicalCheckListPlugin";
@@ -18,11 +9,6 @@ import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext
 import { ContentEditable } from "@lexical/react/LexicalContentEditable";
 import { LexicalErrorBoundary } from "@lexical/react/LexicalErrorBoundary";
 import { HistoryPlugin } from "@lexical/react/LexicalHistoryPlugin";
-import {
-  $createHorizontalRuleNode,
-  $isHorizontalRuleNode,
-  HorizontalRuleNode,
-} from "@lexical/react/LexicalHorizontalRuleNode";
 import { HorizontalRulePlugin } from "@lexical/react/LexicalHorizontalRulePlugin";
 import { LinkPlugin } from "@lexical/react/LexicalLinkPlugin";
 import { ListPlugin } from "@lexical/react/LexicalListPlugin";
@@ -30,31 +16,16 @@ import { MarkdownShortcutPlugin } from "@lexical/react/LexicalMarkdownShortcutPl
 import { OnChangePlugin } from "@lexical/react/LexicalOnChangePlugin";
 import { RichTextPlugin } from "@lexical/react/LexicalRichTextPlugin";
 import { TabIndentationPlugin } from "@lexical/react/LexicalTabIndentationPlugin";
-import { HeadingNode, QuoteNode } from "@lexical/rich-text";
-import type { EditorState, EditorThemeClasses, LexicalEditor, LexicalNode } from "lexical";
+import type { EditorState, EditorThemeClasses, LexicalEditor } from "lexical";
 import { useCallback, useEffect, useMemo, useRef } from "react";
 
 import { cn } from "~/lib/utils";
 
-const HR: ElementTransformer = {
-  dependencies: [HorizontalRuleNode],
-  export: (node: LexicalNode) => {
-    return $isHorizontalRuleNode(node) ? "---" : null;
-  },
-  regExp: /^(---|\*\*\*|___)\s?$/,
-  replace: (parentNode, _children, _match, isImport) => {
-    const line = $createHorizontalRuleNode();
-    if (isImport) {
-      parentNode.replace(line);
-    } else {
-      parentNode.insertBefore(line);
-    }
-    line.selectNext();
-  },
-  type: "element",
-};
-
-export const MARKDOWN_EDITOR_TRANSFORMERS: Array<Transformer> = [HR, CHECK_LIST, ...TRANSFORMERS];
+import {
+  MARKDOWN_EDITOR_NODES,
+  MARKDOWN_EDITOR_TRANSFORMERS,
+  withTrailingNewlineFrom,
+} from "./markdownInPlaceEditing";
 
 const URL_REGEX =
   /((https?:\/\/(www\.)?)|(www\.))[-a-zA-Z0-9@:%._+~#=]{1,256}\.[a-zA-Z0-9()]{1,6}\b([-a-zA-Z0-9()@:%_+.~#?&//=]*)/;
@@ -170,14 +141,19 @@ function MarkdownSyncPlugin(props: {
         return;
       }
       editorState.read(() => {
-        const nextMarkdown = $convertToMarkdownString(MARKDOWN_EDITOR_TRANSFORMERS);
+        // Lexical has no node for the newline a file ends with, so put the
+        // file's own back before anything compares the two.
+        const nextMarkdown = withTrailingNewlineFrom(
+          props.text,
+          $convertToMarkdownString(MARKDOWN_EDITOR_TRANSFORMERS),
+        );
         if (nextMarkdown !== lastEmittedTextRef.current) {
           lastEmittedTextRef.current = nextMarkdown;
           props.onChange(nextMarkdown);
         }
       });
     },
-    [props.onChange],
+    [props.onChange, props.text],
   );
 
   return <OnChangePlugin ignoreSelectionChange onChange={handleChange} />;
@@ -198,17 +174,7 @@ export function FileMarkdownEditor(props: FileMarkdownEditorProps) {
     () => ({
       namespace: "file-markdown-editor",
       theme: editorTheme,
-      nodes: [
-        HeadingNode,
-        QuoteNode,
-        ListNode,
-        ListItemNode,
-        CodeNode,
-        CodeHighlightNode,
-        AutoLinkNode,
-        LinkNode,
-        HorizontalRuleNode,
-      ],
+      nodes: MARKDOWN_EDITOR_NODES,
       editorState: () => {
         $convertFromMarkdownString(initialTextRef.current, MARKDOWN_EDITOR_TRANSFORMERS);
       },
